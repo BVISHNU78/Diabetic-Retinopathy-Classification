@@ -7,4 +7,4 @@ DR can be detected during an eye exam, which may include dilating your pupils to
 ![Screenshot 2024-10-19 225621](https://github.com/user-attachments/assets/e4fc73e6-6963-454f-9984-8a0769043c53)
 ![Screenshot 2024-10-20 233228](https://github.com/user-attachments/assets/b70c6dcd-d26f-4bc7-8d0e-b2c5aec90293)
 ![Screenshot 2024-10-20 234130](https://github.com/user-attachments/assets/d92a4d66-bcda-4fca-a246-46506b813c71)
-
+![diabetics_retinopathy_model h5](https://github.com/user-attachments/assets/e76d12c7-b6cc-4888-95e7-65595d1cafcb)
