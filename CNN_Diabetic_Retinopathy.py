@@ -1,14 +1,15 @@
-import tensorflow as tf
 import numpy as np
 import glob,os
+import tensorflow as tf
 import matplotlib.pyplot as plt
 import pandas as pd
 from sklearn.model_selection import train_test_split
 import warnings
 warnings.filterwarnings('ignore')
+from imblearn.over_sampling import SMOTE
 from tensorflow.keras.models import Model
-from tensorflow.keras.preprocessing.image import ImageDataGenerator,load_img,img_to_array
-from sklearn.utils import resample
+from tensorflow.keras.preprocessing.image import ImageDataGenerator,load_img , img_to_array
+from sklearn.utils import resample,class_weight
 import numpy as np
 from tensorflow.keras.utils import to_categorical
 from sklearn.metrics import classification_report, confusion_matrix, precision_score
@@ -17,13 +18,15 @@ from tensorflow.keras.layers import Dense, GlobalAveragePooling2D
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.applications import VGG16
 from tensorflow.keras.layers import  Dropout, Conv2D, MaxPooling2D, Flatten, Dense
-import kagglehub
-path = kagglehub.dataset_download("saipavansaketh/diabetic-retinopathy-unziped")
-print("Path to dataset files:", path)
-image_folders=glob.glob(r"D:\coding\dibatic retino\data\datas/*.jpeg")
+#import kagglehub
+#path = kagglehub.dataset_download("saipavansaketh/diabetic-retinopathy-unziped")
+#os.system('kaggle datasets download -d saipavansaketh/diabetic-retinopathy-unziped -p ./data')
+#os.system('unzip ./datasets/diabetic-retinopathy-unziped.zip -d ./data')
+#print("Dataset downloaded and unzipped to './data/'")
+image_folders=glob.glob(r"D:\coding\dibatic retino\data\datas\main train\main train/*.jpeg")
 csv_file=pd.read_csv(r"D:\coding\dibatic retino\trainLabels\trainLabels.csv",sep=',')
 print(csv_file)
-image_dir="D:\coding\dibatic retino\data\datas"
+image_dir="D:\coding\dibatic retino\data\datas\main train\main train"
 path_tr=glob.glob(os.path.join(image_dir,'*.jpeg'))
 csv_file['Patient_id']=csv_file['image'].apply(lambda x:x.split('_')[0])
 print(csv_file['Patient_id'])
@@ -35,22 +38,21 @@ csv_file['eye']=csv_file['image'].apply(lambda x:1 if x.split('_')[-1]=='left'el
 print(csv_file['eye'])
 num_class=csv_file['level'].nunique()
 csv_file['level_cat']=csv_file['level'].map(lambda  x : to_categorical(x,num_class))
-csv_file['level_cat'] = csv_file['level'].astype(str)  
 csv_file.dropna(inplace=True)
 csv_file=csv_file[csv_file['exists']]
 data=csv_file[['Patient_id','level']].drop_duplicates()
+print(len(csv_file['Patient_id']))
 labels=data['level'].values
-x_train,x_vaild=train_test_split(csv_file['Patient_id'],train_size=0.2,test_size=0.2,random_state=2018)
+x_train,x_vaild=train_test_split(csv_file['Patient_id'],test_size=0.2,random_state=2018)
 train=csv_file[csv_file['Patient_id'].isin(x_train)]
 x_vaild=csv_file[csv_file['Patient_id'].isin(x_vaild)]
-print(f"train{train.shape[0]} validation{x_vaild.shape[0]}")
+print(f"train{x_train.shape[0]} validation{x_vaild.shape[0]}")
 max_sample=train.groupby(['level','eye']).size().max()
 balance_train=train.groupby(['level','eye'],as_index=False).apply(lambda x:resample(x,replace=True,n_samples=max_sample,random_state=42).reset_index(drop=True))
 print(f"New training set size: {balance_train.shape[0]}")
 print(csv_file)
 balance_train[['level', 'eye']].hist(figsize=(10, 5))
 plt.show()
-
 datagen=ImageDataGenerator(
     rescale=1./255,
     rotation_range=40,
@@ -69,17 +71,23 @@ def generate_data_from_dataframe(df,datagen,batch_size=8,image_size=(32,32)):
             images=[]
             labels=[]
             for _, row in batch_df.iterrows():
-                img=tf.keras.utils.load_img(row['path'],target_size=image_size)
-                img_array=tf.keras.utils.img_to_array(img)/255.0
-                images.append(img_array)
-                labels.append(row['level_cat'])
+                try:
+                    img=load_img(row['path'],target_size=image_size,color_mode="rgb")
+                    img_array=img_to_array(img)/255.0
+                    images.append(img_array)
+                    labels.append(row['level_cat'])
+                except OSError:
+                    print(f"Warning: Skipping truncated image at {row['path']}")
+                    continue
+            if len(images) == 0:
+                continue  
             images=np.array(images)
-            labels=np.array(labels)
+            labels=np.array(labels,dtype='float32')
             yield images, labels
         for x, y in datagen.flow(images,labels,batch_size=batch_size,shuffle=False):
             yield x, y
-train_generator=datagen.flow_from_dataframe(dataframe=train, x_col='path',y_col='level_cat',target_size=(32, 32),batch_size=32,class_mode='categorical')
-valid_generator = valid_datagen.flow_from_dataframe(dataframe=x_vaild,x_col='path',y_col='level_cat',target_size=(32, 32),batch_size=32,class_mode='categorical')
+train_generator=generate_data_from_dataframe(train,datagen,image_size=(32, 32),batch_size=8)
+valid_generator = generate_data_from_dataframe(x_vaild,valid_datagen,image_size=(32, 32),batch_size=8)
 
 for images_batch,labels_batch in train_generator:
     break
@@ -129,6 +137,8 @@ print("vaildation_loss",loss)
 print("vaildation_accuracy",accuracy)
 model.compile(optimizer='adam',loss='categorical_crossentropy',metrics=['accuracy',Precision(),Recall()])
 model.summary()
+smote = SMOTE(sampling_strategy='auto')
+x_train, y_valid = smote.fit_resample(x_train, x_vaild)
 base_model=VGG16(weights="imagenet",include_top=False)
 x=base_model.output
 x=GlobalAveragePooling2D()(x)
@@ -138,12 +148,13 @@ model=Model(inputs=base_model.input,outputs=predictions)
 for layer in base_model.layers:
     layer.trainable=False
 model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
-history = model.fit(train_generator, steps_per_epoch=len(train)//32,validation_data=valid_generator,validation_steps=len(x_vaild)//32,epochs=3, batch_size=32,verbose=1)
+class_weights = {0: 1., 1: 10.}
+history = model.fit(train_generator, steps_per_epoch=len(x_train)//32,validation_data=valid_generator,validation_steps=len(x_vaild)//32,epochs=3, batch_size=32,verbose=1,class_weight=class_weights)
 loss,accuracy=model.evaluate(valid_generator,steps=validation_steps) 
 for layer in base_model.layers:
     layer.trainable=True
 model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
-history = model.fit(train_generator, steps_per_epoch=len(train)//32,validation_data=valid_generator,validation_steps=len(x_vaild)//32,epochs=3, batch_size=32,verbose=1)
+history = model.fit(train_generator, steps_per_epoch=len(x_train)//32,validation_data=valid_generator,validation_steps=len(x_vaild)//32,epochs=3, batch_size=32,verbose=1)
 loss,accuracy=model.evaluate(valid_generator,steps=validation_steps) 
 all_predictions=[]
 all_truelabels=[]
@@ -153,7 +164,7 @@ for x_batch,y_batch in valid_generator:
     true_classes=np.argmax(y_batch,axis=1)
     all_predictions.extend(predicted_classes)
     all_truelabels.extend(true_classes)
-    if len(all_truelabels)>=len(train):
+    if len(all_truelabels)>=len(x_train):
         break
 all_predictions=np.array(all_predictions)
 all_truelabels=np.array(all_truelabels)
@@ -162,3 +173,4 @@ print(confusion_matrix(all_truelabels,all_predictions))
 print("\nclassification_report")
 print(classification_report(all_truelabels,all_predictions))
 model.save("diabetics_retinopathy_model.h5")
+
