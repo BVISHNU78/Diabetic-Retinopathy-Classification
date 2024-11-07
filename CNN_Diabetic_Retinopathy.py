@@ -40,7 +40,7 @@ csv_file.dropna(inplace=True)
 csv_file=csv_file[csv_file['exists']]
 data=csv_file[['Patient_id','level']].drop_duplicates()
 labels=data['level'].values
-x_train,x_vaild=train_test_split(csv_file['Patient_id'],train_size=0.2,test_size=0.2,random_state=42)
+x_train,x_vaild=train_test_split(csv_file['Patient_id'],train_size=0.2,test_size=0.2,random_state=42,stratify=labels)
 train=csv_file[csv_file['Patient_id'].isin(x_train)]
 x_vaild=csv_file[csv_file['Patient_id'].isin(x_vaild)]
 print(f"train{train.shape[0]} validation{x_vaild.shape[0]}")
