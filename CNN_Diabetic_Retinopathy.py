@@ -17,6 +17,9 @@ from tensorflow.keras.layers import Dense, GlobalAveragePooling2D
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.applications import VGG16
 from tensorflow.keras.layers import  Dropout, Conv2D, MaxPooling2D, Flatten, Dense
+import kagglehub
+path = kagglehub.dataset_download("saipavansaketh/diabetic-retinopathy-unziped")
+print("Path to dataset files:", path)
 image_folders=glob.glob(r"D:\coding\dibatic retino\data\datas/*.jpeg")
 csv_file=pd.read_csv(r"D:\coding\dibatic retino\trainLabels\trainLabels.csv",sep=',')
 print(csv_file)
